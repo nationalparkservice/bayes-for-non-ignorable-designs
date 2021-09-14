@@ -1,0 +1,258 @@
+# Authors: L. J. Zachmann and N. T. Hobbs. 2020.
+
+# Likelihood: poisson
+# Design matrix for additional covariates, X: present
+# Deterministic model: exponential
+# Group-level effects: b0
+# Variance structure: hier-site
+# Release: v0.7.0
+
+model {
+
+  # ==========================================================================
+  #     The model for the response variable
+  # --------------------------------------------------------------------------
+
+  # Priors...
+  ## on the coefficients for each covariate.
+  for(m in 1:length(X[1, ])) {
+      Beta[m] ~ dnorm(0, 1 / 100)
+  }
+  ## on slope and intercept parameters and their covariance matrix for each
+  ## site within each stratum.
+  for(k in 1:y.n.strata) {
+      for(j in 1:y.n.site[k]) {
+          B[j, 1:2, k] ~ dmnorm(B.hat[j, 1:2, k], Tau.B[, 1:2, k])
+          B.hat[j, 1, k] <- mu.B0[k]
+          B.hat[j, 2, k] <- mu.B1[k]
+      }
+      mu.B0[k] ~ dnorm(0, 1 / 1000)
+      mu.B1[k] ~ dnorm(0, 1 / 100)
+      Tau.B[1:2, 1:2, k] <- inverse(Sigma.B[1:2, 1:2, k])
+      Sigma.B[1, 1, k] <- sigma.B0[k]^2
+      sigma.B0[k] ~ dunif(1E-6, 100)
+      Sigma.B[2, 2, k] <- sigma.B1[k]^2
+      sigma.B1[k] ~ dunif(1E-6, 100)
+      Sigma.B[1, 2, k] <- rho[k] * sigma.B0[k] * sigma.B1[k]
+      Sigma.B[2, 1, k] <- Sigma.B[1, 2, k]
+      rho[k] ~ dunif(-1, 1)
+  }
+
+  # Likelihood.
+  for(n in 1:length(y)) {
+    ## Exponential deterministic model (w/ additional covariates).
+    mu[n] <- exp(B[y.site[n], 1, y.strata[n]] +
+                 B[y.site[n], 2, y.strata[n]] * x[n] +
+                 X[n, ] %*% Beta)
+    ## Poisson likelihood.
+    y[n] ~ dpois(mu[n])
+    ## Residuals.
+    y.hat[n] <- mu[n]
+    epsilon[n] <- y[n] - y.hat[n]
+  }
+
+  # Quantities used for model checking (e.g., simulated data for comparison
+  # to the observed data and Bayesian P values).
+  for(n in 1:length(y)) {
+    ## Random number generation for the Poisson distribution with parameter
+    ## `mu`.
+    y.rep[n] ~ dpois(mu[n])
+  }
+  ## Bayesian P values.
+  p.sd <- step(sd(y.rep[]) - sd(y[]))
+  p.mean <- step(mean(y.rep[]) - mean(y[]))
+
+  # --------------------------------------------------------------------------
+
+
+  # ==========================================================================
+  #     The model for the missing covariate
+  # --------------------------------------------------------------------------
+
+  # Priors...
+  ## on the coefficients for each covariate.
+  for(m in 1:length(W[1, ])) {
+    Gamma[m] ~ dnorm(0, 1 / 1.5^2)
+  }
+  ## on sigma for each site and/or stratum.
+  for(k in 1:y.n.strata) {
+    for(j in 1:y.n.site[k]) {
+      sigma.x.miss[j, k] ~ dgamma(
+        mu.sigma.x.miss[k]^2 / sigma.sigma.x.miss[k]^2,
+        mu.sigma.x.miss[k] / sigma.sigma.x.miss[k]^2
+      )
+    }
+    mu.sigma.x.miss[k] ~ dgamma(49, 28)
+    sigma.sigma.x.miss[k] ~ dgamma(1, 4)
+  }
+  ## on intercept parameters for each site within each stratum. Slopes vary by
+  ## stratum.
+  for(k in 1:y.n.strata) {
+    mu.G0[k] ~ dnorm(0, 1 / 1.5^2)
+    sigma.G0[k] ~ dunif(1E-6, 100)
+    tau.G0[k] <- 1 / sigma.G0[k]^2
+    G1[k] ~ dnorm(0, 1 / 1.5^2)
+    for(j in 1:y.n.site[k]) {
+      ### Intercepts vary by site and stratum.
+      G0[j, k] ~ dnorm(mu.G0[k], tau.G0[k])
+      ### Put coefficients into matrix form to make them compatible with
+      ### the multiple slopes model.
+      G[j, 1, k] <- G0[j, k]
+      G[j, 2, k] <- G1[k]
+    }
+  }
+
+  # Likelihood.
+  for(n in 1:length(x.miss)) {
+    tau.x.miss[n] <- 1 / sigma.x.miss[x.miss.site[n], x.miss.strata[n]]^2
+    eps[n] ~ dnorm(0, tau.x.miss[n])
+    p[n] <- ilogit(G[x.miss.site[n], 1, x.miss.strata[n]] +
+                   G[x.miss.site[n], 2, x.miss.strata[n]] * x.miss.yr[n] +
+                   W[n, ] %*% Gamma +
+                   eps[n])
+    x.miss[n] ~ dbinom(p[n], x.miss.n)
+  }
+
+  # --------------------------------------------------------------------------
+
+
+  # ==========================================================================
+  #     Derived quantities
+  # --------------------------------------------------------------------------
+
+  ## Finite-samples predictions to in- and out-of-sample sites.
+  for(k in 1:y.n.strata) {
+
+    ## Make a random draw for sites from a discrete uniform distribution from
+    ## j = 1... J sites in a given stratum.
+    for(j in 1:tot.site[k]) {
+      site.wt[j, k] <- 1
+    }
+    p.site[1:tot.site[k], k] <-  site.wt[1:tot.site[k], k] /
+      sum(site.wt[1:tot.site[k], k])
+    j.hat.draw[k] ~ dcat(p.site[1:tot.site[k], k])
+
+    # Make a random draw from the distribution of intercept and/or slope terms.
+    #B0.tilde[k] ~ dnorm(mu.B0[k], tau.B0[k])
+    B.tilde[1:2, k] ~ dmnorm(c(mu.B0[k], mu.B1[k]), Tau.B[, , k])
+    G0.tilde[k] ~ dnorm(mu.G0[k], tau.G0[k])
+
+    # Make a draw for the extra variance term associated with the missing data model.
+    sigma.x.miss.tilde[k] ~ dgamma(
+      mu.sigma.x.miss[k]^2 / sigma.sigma.x.miss[k]^2,
+      mu.sigma.x.miss[k] / sigma.sigma.x.miss[k]^2
+    )
+
+    ## Predictions of the mean response of each stratum, k, at each time,
+    ## t, in the unit vector `x.hat` at the mean of all of the covariates.
+    for(t in 1:length(x.hat)) {
+      hat.strat.mean[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                                     # If j was sampled, use the b0-b1 terms as
+                                     # estimate for that site.
+                                     exp(
+                                       B[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                                       B[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.hat[t]
+                                     ),
+                                     exp(
+                                       B.tilde[1, k] + B.tilde[2, k] * x.hat[t]
+                                     ))
+       hat.strat.mean.at.min.x2[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                                      # If j was sampled, use the b0-b1 terms as
+                                      # estimate for that site.
+                                      exp(
+                                        B[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                                        B[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.hat[t] +
+                                        Beta[which.is.miss] * mgmt.scenario.z #pred.strat.mu.hits.z[1, k] #pred.park.hits.z[1]
+                                      ),
+                                      exp(
+                                        B.tilde[1, k] + B.tilde[2, k] * x.hat[t] +
+                                        Beta[which.is.miss] * mgmt.scenario.z #pred.strat.mu.hits.z[1, k] #pred.park.hits.z[1]
+                                      ))
+      hat.strat.new.obs[t, k] ~ dpois(hat.strat.mean[t, k])
+
+    }
+
+    for(t in 1:n.x.pred) {
+
+      # The extra variance needed for our overdispered cheatgrass measure.
+      tau.tilde[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                                1 / sigma.x.miss[min(j.hat.draw[k], y.n.site[k]), k]^2,
+                                1 / sigma.x.miss.tilde[k]^2)
+      eps.tilde[t, k] ~ dnorm(0, tau.tilde[t, k])
+
+      i.pred[t, k] <- X.pred.lookup[j.hat.draw[k], t, k]#X.pred.lookup[min(j.hat.draw[k], y.n.site[k]), t, k]
+      pred.strat.p[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                                   ilogit(
+                                     G[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                                     G[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.pred[i.pred[t, k]] +
+                                     W.pred[i.pred[t, k], ] %*% Gamma +
+                                     eps.tilde[t, k]
+                                   ),
+                                   ilogit(
+                                     G0.tilde[k] + G1[k] * x.pred[i.pred[t, k]] +
+                                     W.pred[i.pred[t, k], ] %*% Gamma +
+                                     eps.tilde[t, k]
+                                   ))
+      pred.strat.mu.hits.z[t, k] <- ((pred.strat.p[t, k] * x.miss.n) - x.miss.mean) / x.miss.sd
+      pred.strat.hits[t, k] ~ dbinom(pred.strat.p[t, k], x.miss.n)
+      pred.strat.hits.z[t, k] <- (pred.strat.hits[t, k] - x.miss.mean) / x.miss.sd
+      pred.strat.mean[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                                      ifelse(jt.in.range[i.pred[t, k]] == 1,
+                                      # if it was observed used the actual data
+                                            exp(
+                                                B[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                                                B[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.pred[i.pred[t, k]] +
+                                                X.pred.padded[i.pred[t, k], ] %*% Beta
+                                            ),
+                                      # if it's from an observed site in an unobserved year use modeled data, but
+                                      # the b0-b1 coefs for that site
+                                            exp(
+                                                B[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                                                B[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.pred[i.pred[t, k]] +
+                                                X.pred[i.pred[t, k], which.isnt.miss] %*% Beta[which.isnt.miss] +
+                                                Beta[which.is.miss] * pred.strat.hits.z[t, k]
+                                            )
+                                      ),
+                                      # If the draw for j is entirely out of sample, then make draw for b0-b1 and
+                                      # used modeled data in the linear predictor
+                                      exp(
+                                          B.tilde[1, k] + B.tilde[2, k] * x.pred[i.pred[t, k]] +
+                                          X.pred[i.pred[t, k], which.isnt.miss] %*% Beta[which.isnt.miss] +
+                                          Beta[which.is.miss] * pred.strat.hits.z[t, k]
+                                      ))
+      pred.strat.new.obs[t, k] ~ dpois(pred.strat.mean[t, k])
+    }
+
+
+  }
+
+  for(k in 1:y.n.strata) {
+
+      ## Trend at the stratum level.
+      trend.stratum.diff[k] <-
+          hat.strat.mean[length(x.hat), k] - hat.strat.mean[1, k]
+      trend.stratum.avg.annual.change[k] <- trend.stratum.diff[k] / max(x.hat.raw)
+
+  }
+
+  # Trend at the park level.
+  for(t in 1:length(x.hat)) {
+    hat.park.mean[t] <- inprod(hat.strat.mean[t, ], wt[])
+    hat.park.mean.at.min.x2[t] <- inprod(hat.strat.mean.at.min.x2[t, ], wt[])
+  }
+  trend.park.diff <- hat.park.mean[length(x.hat)] - hat.park.mean[1]
+  trend.park.avg.annual.change <- trend.park.diff / max(x.hat.raw)
+
+  for(t in 1:n.x.pred) {
+    pred.park.p[t] <- inprod(pred.strat.p[t, ], wt[])
+    pred.park.mean[t] <- inprod(pred.strat.mean[t, ], wt[])
+    pred.park.hits.z[t] <- inprod(pred.strat.hits.z[t, ], wt[])
+  }
+  mu.B0.park <- inprod(mu.B0[], wt[])
+  mu.B1.park <- inprod(mu.B1[], wt[])
+  mu.G0.park <- inprod(mu.G0[], wt[])
+  G1.park <- inprod(G1[], wt[])
+
+  # --------------------------------------------------------------------------
+
+}

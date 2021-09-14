@@ -1,0 +1,235 @@
+# Authors: L. J. Zachmann and N. T. Hobbs. 2020.
+
+# Likelihood: ordinal-latent-normal
+# Design matrix for additional covariates, X: present
+# Deterministic model: linear-oln
+# Group-level effects: b0
+# Variance structure: hier-site
+# Release: v0.7.0
+
+model {
+
+    # Priors...
+    for(k in 1:y.n.strata) {
+        mu.sigma[k] ~ dgamma(.01, .01)
+        sigma.sigma[k] ~ dgamma(.01, .01)
+        # This code allows for site- or strata-level variances: .01 is rate and
+        # shape parameter in flat gamma.
+        for(j in 1:y.n.site[k]) {
+              # IF `y.q` == 0, then variances are estimated on a per-site basis
+              # independently. IF `y.q` == 1, then site-level variances are drawn
+              # from a common (gamma) distribution with mean `mu.sigma` and
+              # variance `sigma.sigma`.
+              sigma.ss[j, k] ~ dgamma(
+                  y.q * mu.sigma[k]^2 / sigma.sigma[k]^2 + (1 - y.q) * .01,
+                  y.q * mu.sigma[k] / sigma.sigma[k]^2 + (1 - y.q) * .01
+              )
+        }
+    }
+    # Priors on cutpoints, 1 and nYlevels-1 are fixed (Kruschke 2nd ed., pg. 688)
+    for(k in 2:(nYlevels - 2)) {
+        theta[k] ~  dnorm(k + .05, 1/2^2)
+    }
+    ## on the coefficients for each covariate.	
+    for(k in 1:y.n.strata) {	
+      for(m in 1:length(X[1, ])) {	
+          Beta[k, m] ~ dnorm(0, 1E-04)	
+      }	
+    }
+    ## on intercept parameters for each site within each stratum. Slopes vary by
+    ## stratum.
+    for(k in 1:y.n.strata) {
+        mu.B0[k] ~ dnorm(0, 4E-06)
+        sigma.B0[k] ~ dt(0, 1/(10^2), 1) T(0,)  # implies half-cauchy with scale of 10
+        tau.B0[k] <- 1 / sigma.B0[k]^2
+        B1[k] ~ dnorm(0, 1E-04)
+        for(j in 1:y.n.site[k]) {
+            ### Intercepts vary by site and stratum.
+            B0.offset[j, k] ~ dnorm(0, 1)
+            B0[j, k] <- mu.B0[k] + B0.offset[j, k] * sigma.B0[k]
+            ### Put coefficients into matrix form to make them compatible with
+            ### the multiple slopes model.
+            B[j, 1, k] <- B0[j, k]
+            B[j, 2, k] <- B1[k]
+        }
+    }
+
+    # Likelihood.
+    for(n in 1:length(y)) {
+        ## Linear deterministic model (w/ additional covariates).
+        mu[n] <- B[y.site[n], 1, y.strata[n]] +
+                    B[y.site[n], 2, y.strata[n]] * x[n] +
+                    X[n, ] %*% Beta[y.strata[n], ]
+        tau[n] <- 1 / sigma.ss[y.site[n], y.strata[n]]^2
+
+        y[n] ~ dcat(pr[n, 1:nYlevels])
+        y.rep[n] ~ dcat(pr[n, 1:nYlevels])
+
+        pr[n, 1] <- pnorm(theta[1], mu[n] , tau[n])
+        for (k in 2:(nYlevels - 1)) {
+          pr[n, k] <- max(0, pnorm(theta[k] , mu[n] , tau[n]) -
+                            pnorm(theta[k - 1] , mu[n] , tau[n]))
+        }
+        pr[n, nYlevels] <- 1 - pnorm(theta[nYlevels - 1] , mu[n] , tau[n])
+
+        # DIC will compute using the JAGS DIC module.
+        # Posterior predictive loss will probably work using the same formula as
+        # for richness using y.rep.
+        ## Residuals.
+        y.hat[n] <- inprod(pr[n, 1:nYlevels] , 1:nYlevels)  # It would be interesting to see if y.hat[n] is the same as mu[n].  I think it will be!
+        epsilon[n] <- y[n] - y.hat[n]
+        #LIKELIHOOD_RELATED_DQS_SWITCH
+    }
+
+    # Derived quantities.
+    #GAP_SIZE_THRESH_SWITCH
+    for(k in 1:y.n.strata) {
+        ## Predictions of the response (both the *mean* of new observations and
+        ## *individual observations*) for each site, j, in each stratum k, at
+        ## each time, t, in the unit vector `x.hat` (pg. 197 of Hobbs and
+        ## Hooten 2015).
+        for(j in 1:y.n.site[k]) {
+            tau.site[j, k] <- 1 / sigma.ss[j, k]^2
+            for(t in 1:length(x.hat)) {
+                ### The posterior predictive distribution of the mean of new
+                ### observations.
+                hat.site.mu[j, t, k] <- B[j, 1, k] + B[j, 2, k] * x.hat[t]
+
+                hat.site.pr[j, t, k, 1] <-
+                    pnorm(theta[1], hat.site.mu[j, t, k] , tau.site[j, k])
+                for (m in 2:(nYlevels - 1)) {
+                  hat.site.pr[j, t, k, m] <-
+                    max(0, pnorm(theta[m] , hat.site.mu[j, t, k], tau.site[j, k]) -
+                        pnorm(theta[m - 1] , hat.site.mu[j, t, k] , tau.site[j, k]))
+                }
+                hat.site.pr[j, t, k, nYlevels] <-
+                    1 - pnorm(theta[nYlevels - 1], hat.site.mu[j, t, k] , tau.site[j, k])
+
+                hat.site.mean[j, t, k] <-
+                    inprod(hat.site.pr[j, t, k, 1:nYlevels], 1:nYlevels)  # same as hat.site.mu[j, t, k]?
+                ### The posterior predictive distribution of an individual
+                ### observation.
+            				hat.site.new.obs[j, t, k] ~
+                				dcat(hat.site.pr[j, t, k, 1:nYlevels])
+            }
+        }
+    }
+    for(k in 1:y.n.strata) {
+
+        ## Predictions of the mean response of each stratum, k, at each time,
+        ## t, in the unit vector `x.hat`.
+        for(j in 1:tot.site[k]) {
+          site.wt[j, k] <- 1
+        }
+        p.site[1:tot.site[k], k] <-  site.wt[1:tot.site[k], k] /
+            sum(site.wt[1:tot.site[k], k])
+        j.hat.draw[k] ~ dcat(p.site[1:tot.site[k], k])
+        B0.offset.tilde[k] ~ dnorm(0, 1)
+        B0.tilde[k] <- mu.B0[k] + B0.offset.tilde[k] * sigma.B0[k]
+        sigma.tilde[k] ~
+          dgamma(mu.sigma[k]^2 / sigma.sigma[k]^2, mu.sigma[k] / sigma.sigma[k]^2)
+        for(t in 1:length(x.hat)) {
+            hat.strat.mu[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+            (
+                B[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                B[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.hat[t]
+                ),
+            (
+                B0.tilde[k] + B1[k] * x.hat[t]
+                ))
+            hat.tau.tilde[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                                      tau.site[min(j.hat.draw[k], y.n.site[k]), k],
+                                      1 / sigma.tilde[k]^2)
+            hat.strat.pr[t, k, 1] <-
+                pnorm(theta[1], hat.strat.mu[t, k] , hat.tau.tilde[t, k])
+            for (m in 2:(nYlevels - 1)) {
+              hat.strat.pr[t, k, m] <-
+                max(0, pnorm(theta[m] , hat.strat.mu[t, k], hat.tau.tilde[t, k]) -
+                    pnorm(theta[m - 1] , hat.strat.mu[t, k], hat.tau.tilde[t, k]))
+            }
+            hat.strat.pr[t, k, nYlevels] <-
+                1 - pnorm(theta[nYlevels - 1], hat.strat.mu[t, k], hat.tau.tilde[t, k])
+            hat.strat.mean[t, k] <-
+                inprod(hat.strat.pr[t, k, 1:nYlevels], 1:nYlevels)
+        }
+        for(t in 1:n.x.pred) {
+            i.pred[t, k] <- X.pred.lookup[j.hat.draw[k], t, k]
+            pred.strat.mu[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                (
+                    B[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                    B[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.pred[i.pred[t, k]] +
+                    X.pred[i.pred[t, k], ] %*% Beta[k, ]
+                    ),
+                (
+                    B0.tilde[k] + B1[k] * x.pred[i.pred[t, k]] +
+                    X.pred[i.pred[t, k], ] %*% Beta[k, ]
+                    ))
+            pred.tau.tilde[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+                                      tau.site[min(j.hat.draw[k], y.n.site[k]), k],
+                                      1 / sigma.tilde[k]^2)
+            pred.strat.pr[t, k, 1] <-
+                pnorm(theta[1], pred.strat.mu[t, k] , pred.tau.tilde[t, k])
+            for (m in 2:(nYlevels - 1)) {
+              pred.strat.pr[t, k, m] <-
+                max(0, pnorm(theta[m] , pred.strat.mu[t, k], pred.tau.tilde[t, k]) -
+                    pnorm(theta[m - 1] , pred.strat.mu[t, k], pred.tau.tilde[t, k]))
+            }
+            pred.strat.pr[t, k, nYlevels] <-
+                1 - pnorm(theta[nYlevels - 1], pred.strat.mu[t, k], pred.tau.tilde[t, k])
+            pred.strat.mean[t, k] <-
+                inprod(pred.strat.pr[t, k, 1:nYlevels], 1:nYlevels)
+        }
+    }
+    for(k in 1:y.n.strata) {
+
+        ## Trend at the stratum level.
+        trend.stratum.diff[k] <-
+            hat.strat.mean[length(x.hat), k] - hat.strat.mean[1, k]
+        trend.stratum.avg.annual.change[k] <- trend.stratum.diff[k] / max(x.hat.raw)
+
+    }
+    for(i in in.sample.idx) {
+        pred.site.mu[j.pred[i], x.pred.index[i], k.pred[i]] <-
+          B[j.pred[i], 1, k.pred[i]] + B[j.pred[i], 2, k.pred[i]] * x.pred[i] +
+          X.pred[i, ] %*% Beta[k.pred[i], ]
+
+        pred.site.pr[j.pred[i], x.pred.index[i], k.pred[i], 1] <-
+            pnorm(theta[1], pred.site.mu[j.pred[i], x.pred.index[i], k.pred[i]] ,
+            tau.site[j.pred[i], k.pred[i]])
+        for (m in 2:(nYlevels - 1)) {
+          pred.site.pr[j.pred[i], x.pred.index[i], k.pred[i], m] <-
+            max(0,
+                pnorm(theta[m] , pred.site.mu[j.pred[i], x.pred.index[i], k.pred[i]],
+                      tau.site[j.pred[i], k.pred[i]]) -
+                  pnorm(theta[m - 1] , pred.site.mu[j.pred[i], x.pred.index[i], k.pred[i]],
+                        tau.site[j.pred[i], k.pred[i]]))
+        }
+        pred.site.pr[j.pred[i], x.pred.index[i], k.pred[i], nYlevels] <-
+            1 - pnorm(theta[nYlevels - 1], pred.site.mu[j.pred[i], x.pred.index[i], k.pred[i]],
+                      tau.site[j.pred[i], k.pred[i]])
+
+        pred.site.mean[j.pred[i], x.pred.index[i], k.pred[i]] <-
+            inprod(pred.site.pr[j.pred[i], x.pred.index[i], k.pred[i], 1:nYlevels], 1:nYlevels)
+
+            pred.site.new.obs[j.pred[i], x.pred.index[i], k.pred[i]] ~
+                dcat(pred.site.pr[j.pred[i], x.pred.index[i], k.pred[i], 1:nYlevels])
+    }
+    # Trend at the park level.
+    for(t in 1:length(x.hat)) {
+        hat.park.mean[t] <- inprod(hat.strat.mean[t, ], wt[])
+    }
+    trend.park.diff <- hat.park.mean[length(x.hat)] - hat.park.mean[1]
+    trend.park.avg.annual.change <- trend.park.diff / max(x.hat.raw)
+    for(t in 1:n.x.pred) {
+        pred.park.mean[t] <- inprod(pred.strat.mean[t, ], wt[])
+        #pred.park.mean.oos[t] <- inprod(pred.strat.mean.oos[t, ], wt[])
+    }
+    mu.B0.park <- inprod(mu.B0[], wt[])
+
+    # Quantities used for model checking (e.g., simulated data for comparison
+    # to the observed data and Bayesian P values).
+    ## Bayesian P values.
+    p.sd <- step(sd(y.rep[]) - sd(y[]))
+    p.mean <- step(mean(y.rep[]) - mean(y[]))
+
+}

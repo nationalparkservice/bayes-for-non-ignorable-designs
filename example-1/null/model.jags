@@ -1,0 +1,118 @@
+# Authors: L. J. Zachmann and N. T. Hobbs. 2020.
+
+# Likelihood: poisson
+# Design matrix for additional covariates, X: not present
+# Deterministic model: exponential
+# Group-level effects: b0-b1
+# Variance structure: hier-site
+# Release: v0.7.0
+
+model {
+
+    # Priors...
+    ## on slope and intercept parameters and their covariance matrix for each
+    ## site within each stratum.
+    for(k in 1:y.n.strata) {
+        for(j in 1:y.n.site[k]) {
+            B[j, 1:2, k] ~ dmnorm(B.hat[j, 1:2, k], Tau.B[, 1:2, k])
+            B.hat[j, 1, k] <- mu.B0[k]
+            B.hat[j, 2, k] <- mu.B1[k]
+        }
+        mu.B0[k] ~ dnorm(0, 0.001)
+        mu.B1[k] ~ dnorm(0, 0.01)
+        Tau.B[1:2, 1:2, k] <- inverse(Sigma.B[1:2, 1:2, k])
+        Sigma.B[1, 1, k] <- sigma.B0[k]^2
+        sigma.B0[k] ~ dunif(1E-6, 100)
+        Sigma.B[2, 2, k] <- sigma.B1[k]^2
+        sigma.B1[k] ~ dunif(1E-6, 100)
+        Sigma.B[1, 2, k] <- rho[k] * sigma.B0[k] * sigma.B1[k]
+        Sigma.B[2, 1, k] <- Sigma.B[1, 2, k]
+        rho[k] ~ dunif(-1, 1)
+    }
+
+    # Likelihood.
+    for(n in 1:length(y)) {
+        ## Exponential deterministic model.
+        mu[n] <- exp(B[y.site[n], 1, y.strata[n]] +
+                     B[y.site[n], 2, y.strata[n]] * x[n])
+        ## Poisson likelihood.
+        y[n] ~ dpois(mu[n])
+        ## Residuals.
+        y.hat[n] <- mu[n]
+        epsilon[n] <- y[n] - y.hat[n]
+        #LIKELIHOOD_RELATED_DQS_SWITCH
+    }
+
+    # Derived quantities.
+    #GAP_SIZE_THRESH_SWITCH
+    for(k in 1:y.n.strata) {
+        ## Predictions of the response (both the *mean* of new observations and
+        ## *individual observations*) for each site, j, in each stratum k, at
+        ## each time, t, in the unit vector `x.hat` (pg. 197 of Hobbs and
+        ## Hooten 2015).
+        for(j in 1:y.n.site[k]) {
+            for(t in 1:length(x.hat)) {
+                ### The posterior predictive distribution of the mean of new
+                ### observations.
+                hat.site.mean[j, t, k] <- exp(
+                    B[j, 1, k] + B[j, 2, k] * x.hat[t]
+                    )
+                ### The posterior predictive distribution of an individual
+                ### observation.
+        				hat.site.new.obs[j, t, k] ~
+            				dpois(hat.site.mean[j, t, k])
+            }
+        }
+    }
+    for(k in 1:y.n.strata) {
+
+        ## Predictions of the mean response of each stratum, k, at each time,
+        ## t, in the unit vector `x.hat`.
+        for(j in 1:tot.site[k]) {
+          site.wt[j, k] <- 1
+        }
+        p.site[1:tot.site[k], k] <-  site.wt[1:tot.site[k], k] /
+            sum(site.wt[1:tot.site[k], k])
+        j.hat.draw[k] ~ dcat(p.site[1:tot.site[k], k])
+        B.tilde[1:2, k] ~ dmnorm(c(mu.B0[k], mu.B1[k]), Tau.B[, , k])
+        for(t in 1:length(x.hat)) {
+            hat.strat.mean[t, k] <- ifelse(j.hat.draw[k] <= y.n.site[k],
+            exp(
+                B[min(j.hat.draw[k], y.n.site[k]), 1, k] +
+                B[min(j.hat.draw[k], y.n.site[k]), 2, k] * x.hat[t]
+                ),
+            exp(
+                B.tilde[1, k] + B.tilde[2, k] * x.hat[t]
+                ))
+            hat.strat.new.obs[t, k] ~ dpois(hat.strat.mean[t, k])
+        }
+    }
+    for(k in 1:y.n.strata) {
+
+        ## Trend at the stratum level.
+        trend.stratum.diff[k] <-
+            hat.strat.mean[length(x.hat), k] - hat.strat.mean[1, k]
+        trend.stratum.avg.annual.change[k] <- trend.stratum.diff[k] / max(x.hat.raw)
+
+    }
+    # Trend at the park level.
+    for(t in 1:length(x.hat)) {
+        hat.park.mean[t] <- inprod(hat.strat.mean[t, ], wt[])
+    }
+    trend.park.diff <- hat.park.mean[length(x.hat)] - hat.park.mean[1]
+    trend.park.avg.annual.change <- trend.park.diff / max(x.hat.raw)
+    mu.B0.park <- inprod(mu.B0[], wt[])
+    mu.B1.park <- inprod(mu.B1[], wt[])
+
+    # Quantities used for model checking (e.g., simulated data for comparison
+    # to the observed data and Bayesian P values).
+    for(n in 1:length(y)) {
+        ## Random number generation for the Poisson distribution with parameter
+        ## `mu`.
+        y.rep[n] ~ dpois(mu[n])
+    }
+    ## Bayesian P values.
+    p.sd <- step(sd(y.rep[]) - sd(y[]))
+    p.mean <- step(mean(y.rep[]) - mean(y[]))
+
+}

@@ -1,0 +1,21 @@
+# Action metadata
+
+name: "Implement example analyses"
+
+description: "Run R scripts used to fit models and record the time"
+
+inputs:
+  rfile:  # id of input
+    description: 'Which R file'
+    required: true
+    default: 'example-1/ht/design-based-ests.R'
+
+outputs:
+  time: # id of output
+    description: 'The time the task completed'
+
+runs:
+  using: "docker"
+  image: ghcr.io/lzachmann/bayes-for-non-ignorable-designs:main # was: "Dockerfile"
+  args:
+    - ${{ inputs.rfile }}

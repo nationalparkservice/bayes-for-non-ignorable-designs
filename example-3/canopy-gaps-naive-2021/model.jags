@@ -1,0 +1,155 @@
+# Authors: L. J. Zachmann and N. T. Hobbs. 2020.
+
+# Likelihood: lognormal
+# Design matrix for additional covariates, X: not present
+# Deterministic model: exponential
+# Group-level effects: b0
+# Variance structure: hier-site
+# Release: v0.7.0
+
+model {
+
+    # Priors...
+    ### on sigma for each site and/or stratum.
+    for(k in 1:y.n.strata) {
+        for(j in 1:y.n.site[k]) {
+              # IF `y.q` == 0, then variances are estimated on a per-site basis
+              # independently. IF `y.q` == 1, then site-level variances are drawn
+              # from a common (gamma) distribution with mean `mu.sigma` and
+              # variance `sigma.sigma`.
+              sigma.ss[j, k] ~ dgamma(
+                  y.q * mu.sigma[k]^2 / sigma.sigma[k]^2 + (1 - y.q) * .01,
+                  y.q * mu.sigma[k] / sigma.sigma[k]^2 + (1 - y.q) * .01
+              )
+        }
+        mu.sigma[k] ~ dgamma(.01, .01)
+        sigma.sigma[k] ~ dgamma(.01, .01)
+    }
+    ## on intercept parameters for each site within each stratum. Slopes vary by
+    ## stratum.
+    for(k in 1:y.n.strata) {
+        mu.B0[k] ~ dnorm(0, 0.001)
+        sigma.B0[k] ~ dunif(1E-6, 100)
+        tau.B0[k] <- 1 / sigma.B0[k]^2
+        B1[k] ~ dnorm(0, 0.01)
+        for(j in 1:y.n.site[k]) {
+            ### Intercepts vary by site and stratum.
+            B0[j, k] ~ dnorm(mu.B0[k], tau.B0[k])
+            ### Put coefficients into matrix form to make them compatible with
+            ### the multiple slopes model.
+            B[j, 1, k] <- B0[j, k]
+            B[j, 2, k] <- B1[k]
+        }
+    }
+
+    # Likelihood.
+    for(n in 1:length(y)) {
+        ## Exponential deterministic model.
+        mu[n] <- exp(B[y.site[n], 1, y.strata[n]] +
+                     B[y.site[n], 2, y.strata[n]] * x[n])
+        ## Lognormal likelihood.
+        mu.log.y[n] <- log(mu[n]) - 1/2 * log((sigma2[n] + mu[n]^2) / mu[n]^2)
+        tau.log.y[n] <- 1 / sigma.log.y[n]^2
+        sigma2[n] <- sigma.ss[y.site[n], y.strata[n]]^2
+        sigma.log.y[n] <- sqrt(log((sigma2[n] + mu[n]^2) / mu[n]^2))
+        y[n] ~ dlnorm(mu.log.y[n], tau.log.y[n]) 
+        ## Residuals.
+        y.hat[n] <- mu[n]
+        epsilon[n] <- y[n] - y.hat[n]
+        #LIKELIHOOD_RELATED_DQS_SWITCH
+    }
+
+    # Derived quantities.
+    #GAP_SIZE_THRESH_SWITCH
+    for(k in 1:y.n.strata) {
+        ## Predictions of the response (both the *mean* of new observations and
+        ## *individual observations*) for each site, j, in each stratum k, at
+        ## each time, t, in the unit vector `x.hat` (pg. 197 of Hobbs and
+        ## Hooten 2015).
+        for(j in 1:y.n.site[k]) {
+            for(t in 1:length(x.hat)) {
+                ### The posterior predictive distribution of the mean of new
+                ### observations.
+                hat.site.mean.log.y[j, t, k] <- log(hat.site.mean[j, t, k]) -
+                  1/2 * log((sigma.ss[j, k]^2 + hat.site.mean[j, t, k]^2) / hat.site.mean[j, t, k]^2)
+                hat.site.mean[j, t, k] <- exp(
+                    B[j, 1, k] + B[j, 2, k] * x.hat[t]
+                    )
+                hat.site.sigma.log.y[j, t, k] <- sqrt(
+                  log((sigma.ss[j, k]^2 + hat.site.mean[j, t, k]^2) / hat.site.mean[j, t, k]^2)
+                  )
+                hat.site.tau.log.y[j, t, k] <- 1 / hat.site.sigma.log.y[j, t, k]^2
+                ### The posterior predictive distribution of an individual
+                ### observation.
+        				hat.site.new.obs[j, t, k] ~
+            				dlnorm(hat.site.mean.log.y[j, t, k], hat.site.tau.log.y[j, t, k])
+            }
+        }
+    }
+    for(k in 1:y.n.strata) {
+
+        ## Predictions of the mean response of each stratum, k, at each time,
+        ## t, in the unit vector `x.hat`.
+        for(j in 1:y.n.site[k]) {
+          site.wt[j, k] <- 1
+        }
+        p.site[1:y.n.site[k], k] <-
+            site.wt[1:y.n.site[k], k] / sum(site.wt[1:y.n.site[k], k])
+        j.hat.draw[k] ~ dcat(p.site[1:y.n.site[k], k])
+        B0.tilde[k] ~ dnorm(mu.B0[k], tau.B0[k])
+        sigma.tilde[k] ~
+          dgamma(mu.sigma[k]^2 / sigma.sigma[k]^2, mu.sigma[k] / sigma.sigma[k]^2)
+        for(t in 1:length(x.hat)) {
+            hat.strat.mean.log.y[t, k] <- log(hat.strat.mean[t, k]) -
+                1/2 * log((sigma.ss[j.hat.draw[k], k]^2 + hat.strat.mean[t, k]^2) / hat.strat.mean[t, k]^2)
+            hat.strat.mean[t, k] <- exp(
+                B[j.hat.draw[k], 1, k] + B[j.hat.draw[k], 2, k] * x.hat[t]
+                )
+            hat.strat.sigma.log.y[t, k] <- sqrt(
+              log((sigma.ss[j.hat.draw[k], k]^2 + hat.strat.mean[t, k]^2) / hat.strat.mean[t, k]^2)
+              )
+            hat.strat.tau.log.y[t, k] <- 1 / hat.strat.sigma.log.y[t, k]^2
+            hat.strat.new.obs[t, k] ~
+              dlnorm(hat.strat.mean.log.y[t, k], hat.strat.tau.log.y[t, k])
+            hat.strat.mean.oos[t, k] <- exp(
+                B0.tilde[k] + B1[k] * x.hat[t]
+            )
+            #hat.strat.mean.oos[t, k] <- exp(
+            #    hat.strat.mean.log.y.oos[t, k] + sigma.ss[j.hat.draw[k], k]^2/2
+            #)
+        }
+    }
+    for(k in 1:y.n.strata) {
+
+        ## Trend at the stratum level.
+        trend.stratum.diff[k] <-
+            hat.strat.mean[length(x.hat), k] - hat.strat.mean[1, k]
+        trend.stratum.avg.annual.change[k] <- trend.stratum.diff[k] / max(x.hat.raw)
+        trend.stratum.diff.oos[k] <-
+            hat.strat.mean.oos[length(x.hat), k] - hat.strat.mean.oos[1, k]
+        trend.stratum.avg.annual.change.oos[k] <- trend.stratum.diff.oos[k] / max(x.hat.raw)
+
+    }
+    # Trend at the park level.
+    for(t in 1:length(x.hat)) {
+        hat.park.mean[t] <- inprod(hat.strat.mean[t, ], wt[])
+        hat.park.mean.oos[t] <- inprod(hat.strat.mean.oos[t, ], wt[])
+    }
+    trend.park.diff <- hat.park.mean[length(x.hat)] - hat.park.mean[1]
+    trend.park.avg.annual.change <- trend.park.diff / max(x.hat.raw)
+    trend.park.diff.oos <- hat.park.mean.oos[length(x.hat)] - hat.park.mean.oos[1]
+    trend.park.avg.annual.change.oos <- trend.park.diff.oos / max(x.hat.raw)
+    mu.B0.park <- inprod(mu.B0[], wt[])
+
+    # Quantities used for model checking (e.g., simulated data for comparison
+    # to the observed data and Bayesian P values).
+    for(n in 1:length(y)) {
+        ## Random number generation for the lognormal distribution with
+        ## centrality and scale parameters.
+        y.rep[n] ~ dlnorm(mu.log.y[n], tau.log.y[n]) 
+    }
+    ## Bayesian P values.
+    p.sd <- step(sd(y.rep[]) - sd(y[]))
+    p.mean <- step(mean(y.rep[]) - mean(y[]))
+
+}

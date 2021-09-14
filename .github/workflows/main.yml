@@ -1,0 +1,192 @@
+# Workflow code
+
+name: Analysis CI # ===========================================================
+
+on: # controls when the workflow will run
+
+  push: # trigger workflow on push events, but only for the main branch
+    branches: [ main ]
+    paths-ignore:
+      - "README.md" # don't rebuild on documentation changes
+
+  pull_request: # triggers workflow on pull request events (main branch only)
+    branches: [ main ] # ensure changes are "mergeable"
+
+  workflow_dispatch: # permits manual triggers from the Actions tab
+
+jobs: # =======================================================================
+
+  # ---------------------------------------------------------------------------
+  fit: # fit Bayesian models and apply Horvitz–Thompson estimators
+  # ---------------------------------------------------------------------------
+
+    strategy:
+      matrix:
+        rfiles: [example-1/complete, example-1/null, example-1/ht,
+                 example-2/hrs_wyppt_mm, example-2/wyppt_mm, example-2/ht,
+                 example-3/canopy-gaps-2021, example-3/canopy-gaps-naive-2021,
+                 example-3/ht]
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Checkout the repo so the workflow can access it
+      - name: Checkout this repo's action(s)
+        uses: actions/checkout@v2
+
+      # Run analyses and compile results
+      - name: Fit models and compile results
+        id: compile
+        uses: ./.github/actions/model
+        with:
+          rfile: ${{ matrix.rfiles }}/calling-script.R
+
+      # # Replace slashes with dashes in rfile path (for valid artifact names)
+      # - name: Run find-and-replace to remove slashes
+      #   uses: mad9000/actions-find-and-replace-string@1
+      #   id: findandreplace
+      #   with:
+      #     source: ${{ matrix.rfiles }}
+      #     find: '/'
+      #     replace: '-'
+
+      # Each artifact behaves as a file share. Uploading to the same artifact
+      # multiple times in the same workflow can overwrite and append already
+      # uploaded files.
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: artifact-${{ github.sha }} # ${{ steps.findandreplace.outputs.value }}-artifact
+          path: output # ${{ github.workspace }}
+
+  # ---------------------------------------------------------------------------
+  design: # study area map and missingness concept figs
+  # ---------------------------------------------------------------------------
+
+    # strategy:
+    #   matrix:
+    #     rfiles: [map.R, panel-design/cartoon.R]
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Checkout the repo so the workflow can access it
+      - name: Checkout this repo's action(s)
+        uses: actions/checkout@v2
+
+      # Download and unpack NPS boundaries
+      - name: Download geospatial data
+        run: |
+          wget -P assets https://irma.nps.gov/DataStore/DownloadFile/662130
+          unzip assets/662130 -d assets/nps_boundary
+          rm assets/662130
+
+      # Use leaflet to create study area map
+      - name: Create map
+        uses: ./.github/actions/model
+        with:
+          rfile: map.R
+
+      # Create concept figure for revisit design
+      - name: Revisit schedule
+        uses: ./.github/actions/model
+        with:
+          rfile: panel-design/cartoon.R
+
+      # Push changes made to the repo during a workflow run
+      - name: Commit context figs
+        uses: EndBug/add-and-commit@v7
+        with:
+          default_author: github_actions
+          branch: main
+          add: "assets/*.jpg"
+          message: Automatic update of map
+
+  # ---------------------------------------------------------------------------
+  visualize: # use outputs from previous job to develop manuscript figures
+  # ---------------------------------------------------------------------------
+
+    needs: fit
+    strategy:
+      matrix:
+        plotters: [example-1, example-2, example-3]
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Checkout the repo so the workflow can access it
+      - name: Checkout this repo's action(s)
+        uses: actions/checkout@v2
+        with:
+          lfs: true
+
+      # Cache LFS assets
+      - name: generate lfs file list
+        run: git lfs ls-files -l | cut -d' ' -f1 | sort > .lfs-assets-id
+      - name: restore lfs cache
+        uses: actions/cache@v2
+        id: lfs-cache
+        with:
+          path: .git/lfs
+          key: ${{ runner.os }}-lfs-${{ hashFiles('.lfs-assets-id') }}-v1
+      - name: pull lfs files
+        run: git lfs pull
+
+      # Download artifacts
+      - name: Download file share
+        uses: actions/download-artifact@v2
+        with:
+          name: artifact-${{ github.sha }}
+          path: output
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      # Use the cached results
+      - name: Use cached results
+        # id: publish
+        uses: ./.github/actions/model
+        with:
+          rfile: ${{ matrix.plotters }}/plotting.R
+
+      # # Delete temporary file store
+      # - uses: geekyeggo/delete-artifact@v1
+      #   with:
+      #     name: artifact-${{ github.sha }}
+      #     # failOnError: false
+
+      # Upload results
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.plotters }}-results # was: ${{ steps.findandreplace.outputs.value }}-artifact
+          path: assets/${{ matrix.plotters }}
+          retention-days: 5
+
+      # Push changes made to the repo during a workflow run
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v7
+        with:
+          default_author: github_actions
+          branch: main
+          add: "assets/${{ matrix.plotters }}/example-*-fig*.jpg" # --force
+          message: Automatic update of all tracked analysis assets
+          # push: origin assets --force
+
+      # # Use the output from the `publish` step
+      # - name: Get task completion time
+      #   run: echo "The time was ${{ steps.publish.outputs.time }}"
+
+  # ---------------------------------------------------------------------------
+  cleanup: # misc housekeeping
+  # ---------------------------------------------------------------------------
+
+    needs: [fit, visualize]
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Delete temporary file store
+      - uses: geekyeggo/delete-artifact@v1
+        with:
+          name: artifact-${{ github.sha }}
+          # failOnError: false
