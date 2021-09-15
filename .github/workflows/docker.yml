@@ -4,7 +4,7 @@ name: Docker # ================================================================
 
 on:
   push:
-    branches: [ 'main' ]
+    branches: [ 'master' ]
     tags: [ 'v*' ]
     paths:
       - ".github/actions/call-r/**"
