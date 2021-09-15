@@ -65,6 +65,7 @@ jobs: # =======================================================================
         with:
           name: artifact-${{ github.sha }} # ${{ steps.findandreplace.outputs.value }}-artifact
           path: output # ${{ github.workspace }}
+          retention-days: 1
 
   # ---------------------------------------------------------------------------
   design: # study area map and missingness concept figs
@@ -167,7 +168,7 @@ jobs: # =======================================================================
         with:
           name: ${{ matrix.plotters }}-results # was: ${{ steps.findandreplace.outputs.value }}-artifact
           path: assets/${{ matrix.plotters }}
-          retention-days: 5
+          retention-days: 1
 
       # Push changes made to the repo during a workflow run
       - name: Commit changes
