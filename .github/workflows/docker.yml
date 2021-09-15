@@ -1,21 +1,29 @@
-name: Docker
+# Docker image workflow
+
+name: Docker # ================================================================
 
 on:
   push:
-    branches: ['master']
+    branches: [ 'main' ]
+    tags: [ 'v*' ]
     paths:
-      - ".github/actions/call-r/Dockerfile"
+      - ".github/actions/call-r/**"
       - ".github/workflows/docker.yml"
+      - "docker/latest/**"
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
-jobs:
+jobs: # =======================================================================
 
   # ---------------------------------------------------------------------------
-  build-and-push-image: # create and publish a Docker image
+  build-and-push-images: # create and publish Docker images
   # ---------------------------------------------------------------------------
+
+    strategy:
+      matrix:
+        context: [ ./.github/actions/call-r, ./docker/latest ]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -38,10 +46,20 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
+      - name: Copy any assets required by the Dockerfile
+        run: cp assets/Latin-Modern-Roman-fontfacekit.zip ${{ matrix.context }}
+
+      - name: Set an environment variable for the image tag
+        id: tag-generator
+        run: |
+          echo "TAG=$(basename $CONTEXT)" >> $GITHUB_ENV
+        env:
+          CONTEXT: ${{ matrix.context }}
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v2
         with:
-          context: ./.github/actions/call-r # was: ./docker/latest
+          context: ${{ matrix.context }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }} # was: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
