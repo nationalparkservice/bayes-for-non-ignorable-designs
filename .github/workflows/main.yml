@@ -4,13 +4,13 @@ name: Analysis CI # ===========================================================
 
 on: # controls when the workflow will run
 
-  push: # trigger workflow on push events, but only for the main branch
-    branches: [ main ]
+  push: # trigger workflow on push events, but only for the master branch
+    branches: [ master ]
     paths-ignore:
       - "README.md" # don't rebuild on documentation changes
 
-  pull_request: # triggers workflow on pull request events (main branch only)
-    branches: [ main ] # ensure changes are "mergeable"
+  pull_request: # triggers workflow on pull request events (master branch only)
+    branches: [ master ] # ensure changes are "mergeable"
 
   workflow_dispatch: # permits manual triggers from the Actions tab
 
@@ -33,6 +33,13 @@ jobs: # =======================================================================
       # Checkout the repo so the workflow can access it
       - name: Checkout this repo's action(s)
         uses: actions/checkout@v2
+
+      # Pull the needed, protected data from the NPS Data Store
+      # At the moment this is VERY inefficient because it's repeated for each job
+      - name: Get protected data from the Data Store
+        run: |
+          ./get-inputs.sh
+          ls -R
 
       # Run analyses and compile results
       - name: Fit models and compile results
@@ -98,7 +105,7 @@ jobs: # =======================================================================
         uses: EndBug/add-and-commit@v7
         with:
           default_author: github_actions
-          branch: main
+          branch: master
           add: "assets/*.jpg"
           message: Automatic update of map
 
@@ -167,7 +174,7 @@ jobs: # =======================================================================
         uses: EndBug/add-and-commit@v7
         with:
           default_author: github_actions
-          branch: main
+          branch: master
           add: "assets/${{ matrix.plotters }}/example-*-fig*.jpg" # --force
           message: Automatic update of all tracked analysis assets
           # push: origin assets --force
