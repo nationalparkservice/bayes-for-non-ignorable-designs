@@ -16,10 +16,25 @@ rm tmp/663063
 #     done' _ {} +
 # rm -r test
 
-# # Move all input files into their respective example directories
+# Move all input files into their respective example directories
 # find tmp \
-#   \( -name "00-input" -o -name ".00-input" -o -name "spsurvey-input-data.csv" \) \
-#   -exec bash -c ‘\
-#     for d; do
-#       cp -r $d $(grep -o "example.*" <<< $d)
-#     done’ _ {} +
+#   \( -name "00-input" -o \
+#      -name ".00-input" -o \
+#      -name "spsurvey-input-data.csv" \) \
+find tmp \
+  \( -name "00-input" -o \
+     -name ".00-input" -o \
+     -name "*_spsurvey.csv" -o \
+     -name "*_InputforHT.csv" \) \
+  -exec bash -c '\
+    for d; do
+      echo $d
+      # The following is likely only temporary.
+      if [[ $d == *_spsurvey.csv || $d == *_InputforHT.csv ]]; then
+        d_new=$(dirname $d)/spsurvey-input-data.csv
+        mv $d $d_new
+        d=$d_new
+      fi
+      cp -r $d $(grep -o "example.*" <<< $d)
+    done' _ {} +
+rm -r tmp/file-share
