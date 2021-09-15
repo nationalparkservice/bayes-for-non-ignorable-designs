@@ -2,7 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: ['main']
+    branches: ['master']
     paths:
       - ".github/actions/model/Dockerfile"
       - ".github/workflows/docker.yml"
