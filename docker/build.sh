@@ -6,6 +6,9 @@ FILE=$(find . -path \*$TAG/Dockerfile)
 REPO=$(basename $(pwd))
 IMAGE=ghcr.io/nationalparkservice/$REPO:$TAG
 
-cd $(dirname $FILE)
+BUILD_CONTEXT=$(dirname $FILE)
+
+cp assets/Latin-Modern-Roman-fontfacekit.zip $BUILD_CONTEXT
+cd $BUILD_CONTEXT
 docker build . --no-cache --rm -t $IMAGE
-# docker build --no-cache --rm -t $IMAGE - < $FILE
+rm Latin-Modern-Roman-fontfacekit.zip
