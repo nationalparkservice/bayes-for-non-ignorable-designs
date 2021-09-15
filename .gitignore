@@ -17,6 +17,7 @@ trash
 **/00-input
 **/03-inference
 **/99-misc
+spsurvey-input-data.csv
 *.doc
 *.docx
 jabes-submission-v*.zip
