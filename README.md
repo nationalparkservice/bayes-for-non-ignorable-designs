@@ -1,5 +1,5 @@
 [![Analysis CI](https://github.com/nationalparkservice/bayes-for-non-ignorable-designs/actions/workflows/main.yml/badge.svg)](https://github.com/nationalparkservice/bayes-for-non-ignorable-designs/actions/workflows/main.yml)
-[![Docker](https://github.com/nationalparkservice/bayes-for-non-ignorable-designs/actions/workflows/docker.yml/badge.svg?branch=main)](https://github.com/nationalparkservice/bayes-for-non-ignorable-designs/actions/workflows/docker.yml)
+[![Docker](https://github.com/nationalparkservice/bayes-for-non-ignorable-designs/actions/workflows/docker.yml/badge.svg?branch=master)](https://github.com/nationalparkservice/bayes-for-non-ignorable-designs/actions/workflows/docker.yml)
 
 # bayes-for-non-ignorable-designs
 
