@@ -4,7 +4,7 @@
 # bayes-for-non-ignorable-designs
 
 ## Getting started
-First we need to clone the repo locally and obtain the various "protected" data assets from the [NPS Data Store](https://doi.org/10.36967/code-2287025).
+First, clone the repo, then use _get-inputs.sh_ to obtain the various "protected" data assets used in the example analyses. The data live on the [NPS Data Store](https://doi.org/10.36967/code-2287025).
 ```sh
 git clone https://github.com/nationalparkservice/bayes-for-non-ignorable-designs.git
 cd bayes-for-non-ignorable-designs
