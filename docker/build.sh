@@ -4,7 +4,7 @@ TAG=${1:-latest}
 FILE=$(find . -path \*$TAG/Dockerfile)
 
 REPO=$(basename $(pwd))
-IMAGE=ghcr.io/lzachmann/$REPO:$TAG
+IMAGE=ghcr.io/nationalparkservice/$REPO:$TAG
 
 cd $(dirname $FILE)
 docker build . --no-cache --rm -t $IMAGE

@@ -5,7 +5,7 @@ ENTRYPOINT=${2:-/init}
 PORT=${3:-8787}
 
 REPO=$(basename $(pwd))
-IMAGE=ghcr.io/lzachmann/$REPO:$TAG
+IMAGE=ghcr.io/nationalparkservice/$REPO:$TAG
 
 if [[ "$(docker images -q $IMAGE 2> /dev/null)" == "" ]]; then
   echo "Image not found, building from recipe...."
