@@ -46,8 +46,10 @@ jobs: # =======================================================================
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
+      - run: git lfs ls-files
       - name: Copy any assets required by the Dockerfile
         run: cp assets/Latin-Modern-Roman-fontfacekit.zip ${{ matrix.context }}
+      - run: ls ${{ matrix.context }}
 
       - name: Set an environment variable for the image tag
         id: tag-generator
