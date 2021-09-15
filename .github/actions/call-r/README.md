@@ -17,7 +17,7 @@ The time upon completion.
 ## Example usage
 
 ```yml
-uses: ./.github/actions/model
+uses: ./.github/actions/call-r
 with:
   rfile: example-1/ht/design-based-ests.R
 ```

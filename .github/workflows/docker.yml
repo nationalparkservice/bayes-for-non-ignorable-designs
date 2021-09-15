@@ -4,7 +4,7 @@ on:
   push:
     branches: ['master']
     paths:
-      - ".github/actions/model/Dockerfile"
+      - ".github/actions/call-r/Dockerfile"
       - ".github/workflows/docker.yml"
 
 env:
@@ -41,7 +41,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v2
         with:
-          context: ./.github/actions/model # was: ./docker/latest
+          context: ./.github/actions/call-r # was: ./docker/latest
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

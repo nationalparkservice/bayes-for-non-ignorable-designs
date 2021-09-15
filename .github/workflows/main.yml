@@ -37,7 +37,7 @@ jobs: # =======================================================================
       # Run analyses and compile results
       - name: Fit models and compile results
         id: compile
-        uses: ./.github/actions/model
+        uses: ./.github/actions/call-r
         with:
           rfile: ${{ matrix.rfiles }}/calling-script.R
 
@@ -83,13 +83,13 @@ jobs: # =======================================================================
 
       # Use leaflet to create study area map
       - name: Create map
-        uses: ./.github/actions/model
+        uses: ./.github/actions/call-r
         with:
           rfile: map.R
 
       # Create concept figure for revisit design
       - name: Revisit schedule
-        uses: ./.github/actions/model
+        uses: ./.github/actions/call-r
         with:
           rfile: panel-design/cartoon.R
 
@@ -144,7 +144,7 @@ jobs: # =======================================================================
       # Use the cached results
       - name: Use cached results
         # id: publish
-        uses: ./.github/actions/model
+        uses: ./.github/actions/call-r
         with:
           rfile: ${{ matrix.plotters }}/plotting.R
 
