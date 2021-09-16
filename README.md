@@ -3,25 +3,32 @@
 
 # bayes-for-non-ignorable-designs
 
+Code and data for the analyses described in the paper:  
+> Zachmann, L.J., Borgman, E.M., Witwicki, D.L. et al. Bayesian Models for Analysis of Inventory and Monitoring Data with Non-ignorable Missingness. JABES (2021). https://doi.org/10.1007/s13253-021-00473-z
+
 ## Getting started
-First, clone the repo, then use _get-inputs.sh_ to obtain the various "protected" data assets used in the example analyses. The data live on the [NPS Data Store](https://doi.org/10.36967/code-2287025).
+First, clone the repo, `cd` into the project directory, then use the shell script _get-inputs.sh_ to obtain the various "protected" data assets used in the example analyses. The data live on the [NPS Data Store](https://doi.org/10.36967/code-2287025). _get-inputs.sh_ uses `wget` to download the zip file, unpack its contents, and move data files and directories to their appropriate location in the file tree. 
 ```sh
 git clone https://github.com/nationalparkservice/bayes-for-non-ignorable-designs.git
 cd bayes-for-non-ignorable-designs
 ./get-inputs.sh
 ```
 
-If you'd like to use Docker to avoid issues with dependencies, you can build and launch an RStudio Server instance using:
+### A special note to Windows users
+Windows users will likely need [Git Bash](https://www.atlassian.com/git/tutorials/git-bash) to run the commands above. Git Bash does not come with `wget` preinstalled. To intall `wget`, follow [these directions](https://www.yinfor.com/2020/11/how-to-add-wget-command-into-git-bash.html).
+
+## Requirements (if not using the Docker image)
+R and JAGS. Specifically, we make use of the following R packages: abind, rjags, coda, HDInterval, spsurvey, tidyverse, hrbrthemes, ggridges, and cowplot.
+
+If you'd like to use [Docker](https://docs.docker.com/desktop/) to avoid issues with dependencies, you can build and launch an RStudio Server instance using:
 ```sh
 ./docker/run.sh
 ```
-The above command assumes you have already cloned the repo and have `cd`'ed into the repo directory. Once the container is running, simply open your browser to http://localhost:8787/ using "bayes" as username and password.
+The above command assumes you have already cloned the repo and have `cd`'ed into the project directory. Once the container is running, simply open your browser to http://localhost:8787/ using "bayes" as username and password.
 
-## Requirements (if not using the Docker image)
-R and JAGS. Specifically, we make use of the following R packages: abind, rjags,
-coda, HDInterval, spsurvey, tidyverse, hrbrthemes, ggridges, and cowplot.
+## Figures from the manuscript (auto-generated using GitHub Actions)
 
-## context
+### Basic context
 
 Study area, missingness in space and time.
 
@@ -29,7 +36,7 @@ Study area, missingness in space and time.
 |---|---|---|
 | ![study area](assets/network-overview.jpg)  | ![spat miss](assets/site-layout.jpg)  | ![time miss](assets/ex-visit-schedule.jpg)  |
 
-## Examples
+### Examples
 1. [Changes in observers and missing covariates](example-1/)
 
 | Figure 3  | Figure 4  |
@@ -59,15 +66,12 @@ Authors: Luke Zachmann*, Tom Hobbs, Erin Borgman, Dana Witwicki, Megan Swan, Che
 
 \* maintainer (lzachmann@gmail.com)
 
-## Citation
-TBD
-
 ## Developer notes
+The assets directory is tracked using Git LFS, which we set up using `git lfs track "assets/**"` (quotes required to avoid shell expansion).
 
-### Short URL
+<!-- ### Short URL
 ```
 curl -i https://git.io -F "url=https://github.com/nationalparkservice/bayes-for-non-ignorable-designs" -F "code=non-ignorable"
 curl -i https://git.io/non-ignorable
 ```
-
-The assets directory is tracked using Git LFS, which we set up using `git lfs track "assets/**"` (quotes required to avoid shell expansion).
+ -->
