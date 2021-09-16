@@ -14,10 +14,10 @@ cd bayes-for-non-ignorable-designs
 ./get-inputs.sh
 ```
 
-### A special note to Windows users
+### A special note for Windows users
 Windows users will likely need [Git Bash](https://www.atlassian.com/git/tutorials/git-bash) to run the commands above. Git Bash does not come with `wget` preinstalled. To intall `wget`, follow [these directions](https://www.yinfor.com/2020/11/how-to-add-wget-command-into-git-bash.html).
 
-## Requirements (if not using the Docker image)
+## Requirements
 R and JAGS. Specifically, we make use of the following R packages: abind, rjags, coda, HDInterval, spsurvey, tidyverse, hrbrthemes, ggridges, and cowplot.
 
 If you'd like to use [Docker](https://docs.docker.com/desktop/) to avoid issues with dependencies, you can build and launch an RStudio Server instance using:
@@ -26,7 +26,7 @@ If you'd like to use [Docker](https://docs.docker.com/desktop/) to avoid issues 
 ```
 The above command assumes you have already cloned the repo and have `cd`'ed into the project directory. Once the container is running, simply open your browser to http://localhost:8787/ using "bayes" as username and password.
 
-## Figures from the manuscript (auto-generated using GitHub Actions)
+## Figures from the manuscript
 
 ### Basic context
 
@@ -56,7 +56,7 @@ Study area, missingness in space and time.
 | ![ex3 fig-a](assets/example-3/example-3-fig-a.jpg)  | ![ex3 fig-b](assets/example-3/example-3-fig-b.jpg)  |
 
 ## Disclaimers
-1. The JAGS models utilize a notation that differs subtly from the model math as it appears in the manuscript. For instance, the intercept and trend slope coefficients &ndash; the $`\bm{\alpha}_k`$ terms in the manuscript &ndash; appear as `B[j, 1, k]` and `B[j, 2, k]`, respectively. Likewise, we use `x` and `X` in place of $`t`$ and $`\bm{\mathrm{W}}`$.
+1. The JAGS models utilize a notation that differs subtly from the model math as it appears in the manuscript. For instance, the intercept and trend slope coefficients &ndash; the $`\boldsymbol{\alpha}_k`$ terms in the manuscript &ndash; appear as `B[j, 1, k]` and `B[j, 2, k]`, respectively. Likewise, we use `x` and `X` in place of $`t`$ and $`\textbf{W}`$.
 2. Though we discuss variography in the manuscript, we do not include information on the spatial location of individual sites here in order to protect the confidentiality of the data.
 3. For purposes of clarity, and to meet page constraints, we omitted some details about the censored and truncated canopy gap size data. Specifics are included in a README for the censored and truncated data example.
 4. The RNG and other hidden state in your programming environment might cause results to differ subtly from those appearing in the manuscript -- the qualitative inference and conclusions drawn should not.
